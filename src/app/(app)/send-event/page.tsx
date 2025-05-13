@@ -1,7 +1,7 @@
 
 import { SendEventForm } from "@/components/forms/SendEventForm";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { EVENT_TYPES, MAILING_LISTS } from "@/lib/constants";
+// EVENT_TYPES and MAILING_LISTS are no longer needed here for props
 import { Metadata } from "next";
 import { APP_NAME } from "@/lib/constants";
 
@@ -22,7 +22,8 @@ export default function SendEventPage() {
           <CardDescription>Fill in the form below to create a new calendar event.</CardDescription>
         </CardHeader>
         <CardContent>
-          <SendEventForm eventTypes={EVENT_TYPES} mailingLists={MAILING_LISTS} />
+          {/* Removed eventTypes and mailingLists props */}
+          <SendEventForm />
         </CardContent>
       </Card>
     </div>

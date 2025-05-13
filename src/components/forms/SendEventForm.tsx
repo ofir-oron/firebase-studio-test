@@ -1,4 +1,3 @@
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -18,16 +17,15 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { createCalendarEvent } from "@/lib/actions";
-import type { EventType, MailingList, EventTypeKey } from "@/lib/types";
+import type { EventTypeKey } from "@/lib/types"; // EventType and MailingList types are not needed for props anymore
+import { EVENT_TYPES, MAILING_LISTS } from "@/lib/constants"; // Import constants directly
 import { CalendarIcon, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-interface SendEventFormProps {
-  eventTypes: EventType[];
-  mailingLists: MailingList[];
-}
+// Props are no longer needed as constants are imported directly
+interface SendEventFormProps {}
 
-const getEventSchema = (eventTypes: EventType[]) => z.object({
+const getEventSchema = (eventTypes: typeof EVENT_TYPES) => z.object({
   dateRange: z.object({
     from: z.date({ required_error: "Start date is required." }),
     to: z.date().optional(),
@@ -46,12 +44,12 @@ const getEventSchema = (eventTypes: EventType[]) => z.object({
 
 type SendEventFormValues = z.infer<ReturnType<typeof getEventSchema>>;
 
-export function SendEventForm({ eventTypes, mailingLists }: SendEventFormProps) {
+export function SendEventForm({}: SendEventFormProps) { // Removed props
   const { toast } = useToast();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   
-  const eventSchema = getEventSchema(eventTypes);
+  const eventSchema = getEventSchema(EVENT_TYPES); // Use imported EVENT_TYPES
 
   const form = useForm<SendEventFormValues>({
     resolver: zodResolver(eventSchema),
@@ -68,24 +66,22 @@ export function SendEventForm({ eventTypes, mailingLists }: SendEventFormProps) 
 
   const watchedDateRange = watch("dateRange");
   const watchedEventType = watch("eventType");
-  const watchedAdditionalText = watch("additionalText", ""); // ensure it's defined
+  const watchedAdditionalText = watch("additionalText", "");
 
   useEffect(() => {
     if (user && watchedDateRange?.from && watchedEventType) {
-      const eventTypeLabel = eventTypes.find(et => et.value === watchedEventType)?.label || watchedEventType;
+      const eventTypeLabel = EVENT_TYPES.find(et => et.value === watchedEventType)?.label || watchedEventType; // Use imported EVENT_TYPES
       const dateStr = watchedDateRange.to && watchedDateRange.from.getTime() !== watchedDateRange.to.getTime()
         ? `${format(watchedDateRange.from, "MMM d")} - ${format(watchedDateRange.to, "MMM d, yyyy")}`
         : format(watchedDateRange.from, "MMM d, yyyy");
       
       let newTitle = `${user.name} - ${dateStr} - ${eventTypeLabel}`;
       if (watchedAdditionalText && watchedAdditionalText.trim().length > 0 && watchedAdditionalText.length <= 30) {
-         // Only append additional text if it's short, otherwise title becomes too long.
-         // Users can customize the title fully if they wish.
         newTitle += ` - ${watchedAdditionalText.trim()}`;
       }
       setValue("title", newTitle);
     }
-  }, [user, watchedDateRange, watchedEventType, watchedAdditionalText, setValue, eventTypes]);
+  }, [user, watchedDateRange, watchedEventType, watchedAdditionalText, setValue]);
 
 
   const onSubmit: SubmitHandler<SendEventFormValues> = async (data) => {
@@ -193,7 +189,7 @@ export function SendEventForm({ eventTypes, mailingLists }: SendEventFormProps) 
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {eventTypes.map((type) => (
+                  {EVENT_TYPES.map((type) => ( // Use imported EVENT_TYPES
                     <SelectItem key={type.value} value={type.value}>
                       <div className="flex items-center">
                         <type.icon className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -246,7 +242,7 @@ export function SendEventForm({ eventTypes, mailingLists }: SendEventFormProps) 
                     <SelectValue placeholder="Select mailing list(s)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mailingLists.map((list) => (
+                    {MAILING_LISTS.map((list) => ( // Use imported MAILING_LISTS
                       <SelectItem key={list.id} value={list.id}>
                         {list.name}
                       </SelectItem>
@@ -280,4 +276,3 @@ function isSameDay(date1: Date, date2: Date): boolean {
          date1.getMonth() === date2.getMonth() &&
          date1.getDate() === date2.getDate();
 }
-
