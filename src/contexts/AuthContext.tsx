@@ -9,12 +9,15 @@ import { useRouter, usePathname } from "next/navigation";
 interface AuthContextType {
   user: User | null;
   login: (email: string, pass: string) => Promise<boolean>;
+  loginWithMicrosoft: () => Promise<boolean>;
   logout: () => void;
   loading: boolean;
   isAuthenticated: boolean;
 }
 
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
+
+const MICROSOFT_MOCK_USER_ID = "user_ms"; // Unique ID for Microsoft mock user
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -57,6 +60,31 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     return false;
   };
 
+  const loginWithMicrosoft = async (): Promise<boolean> => {
+    setLoading(true);
+    // Simulate Microsoft OAuth flow
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    // Use a predefined mock user for Microsoft login or create one if not in MOCK_USERS
+    let microsoftUser = MOCK_USERS.find(u => u.id === MICROSOFT_MOCK_USER_ID);
+    if (!microsoftUser) {
+        microsoftUser = {
+            id: MICROSOFT_MOCK_USER_ID,
+            name: "Bill Gates (MS)",
+            email: "bill.gates@example.com", // Using a mock email
+            // No password for OAuth users, avatar can be generic or specific
+            avatar: "https://picsum.photos/seed/microsoft/100/100", 
+        };
+    }
+    
+    const userData = { id: microsoftUser.id, name: microsoftUser.name, email: microsoftUser.email, avatar: microsoftUser.avatar };
+    setUser(userData);
+    localStorage.setItem("timewise_user", JSON.stringify(userData));
+    setLoading(false);
+    router.push("/send-event");
+    return true;
+  };
+
   const logout = () => {
     setUser(null);
     localStorage.removeItem("timewise_user");
@@ -64,7 +92,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, logout, loading, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, loginWithMicrosoft, logout, loading, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

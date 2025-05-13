@@ -49,20 +49,31 @@ export function LoginForm() {
     setIsLoading(false);
   };
 
-  const handleOAuthLogin = (provider: "google" | "microsoft") => {
-    if (provider === "google") setIsGoogleLoading(true);
-    if (provider === "microsoft") setIsMicrosoftLoading(true);
-
-    // Simulate OAuth call
-    setTimeout(() => {
-      toast({
-        title: "OAuth Login",
-        description: `${provider === "google" ? "Google" : "Microsoft"} login is not implemented in this demo.`,
-        variant: "default",
-      });
-      if (provider === "google") setIsGoogleLoading(false);
-      if (provider === "microsoft") setIsMicrosoftLoading(false);
-    }, 1500);
+  const handleOAuthLogin = async (provider: "google" | "microsoft") => {
+    if (provider === "google") {
+      setIsGoogleLoading(true);
+       // Simulate OAuth call
+      setTimeout(() => {
+        toast({
+          title: "OAuth Login",
+          description: `Google login is not implemented in this demo.`,
+          variant: "default",
+        });
+        setIsGoogleLoading(false);
+      }, 1500);
+    } else if (provider === "microsoft") {
+      setIsMicrosoftLoading(true);
+      const success = await auth.loginWithMicrosoft();
+      if (!success) {
+        toast({
+          title: "Microsoft Login Failed",
+          description: "Could not sign in with Microsoft. Please try again.",
+          variant: "destructive",
+        });
+      }
+      // Navigation is handled by AuthContext
+      setIsMicrosoftLoading(false);
+    }
   };
 
 
