@@ -1,4 +1,3 @@
-
 "use client";
 
 import Link from "next/link";
@@ -89,7 +88,7 @@ export function AppSidebar({ userName, userEmail, userAvatar }: AppSidebarProps)
           <DropdownMenuTrigger asChild>
             <Button variant="ghost" className="w-full justify-start p-2 h-auto group-data-[collapsible=icon]:w-8 group-data-[collapsible=icon]:h-8 group-data-[collapsible=icon]:justify-center">
               <Avatar className="h-8 w-8">
-                <AvatarImage src={userAvatar} alt={userName || "User"} data-ai-hint="person avatar"/>
+                <AvatarImage src={userAvatar} alt={userName || "User"} data-ai-hint="professional avatar"/>
                 <AvatarFallback>
                   {userName ? userName.charAt(0).toUpperCase() : <UserCircle />}
                 </AvatarFallback>

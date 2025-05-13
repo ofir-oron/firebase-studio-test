@@ -10,6 +10,7 @@ interface AuthContextType {
   user: User | null;
   login: (email: string, pass: string) => Promise<boolean>;
   loginWithMicrosoft: () => Promise<boolean>;
+  loginWithGoogle: () => Promise<boolean>; // Added for Google
   logout: () => void;
   loading: boolean;
   isAuthenticated: boolean;
@@ -18,6 +19,7 @@ interface AuthContextType {
 export const AuthContext = createContext<AuthContextType | undefined>(undefined);
 
 const MICROSOFT_MOCK_USER_ID = "user_ms"; // Unique ID for Microsoft mock user
+const GOOGLE_MOCK_USER_ID = "user_gg"; // Unique ID for Google mock user
 
 export const AuthProvider = ({ children }: { children: ReactNode }) => {
   const [user, setUser] = useState<User | null>(null);
@@ -65,19 +67,40 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
     // Simulate Microsoft OAuth flow
     await new Promise(resolve => setTimeout(resolve, 1500));
 
-    // Use a predefined mock user for Microsoft login or create one if not in MOCK_USERS
     let microsoftUser = MOCK_USERS.find(u => u.id === MICROSOFT_MOCK_USER_ID);
     if (!microsoftUser) {
         microsoftUser = {
             id: MICROSOFT_MOCK_USER_ID,
             name: "Bill Gates (MS)",
-            email: "bill.gates@example.com", // Using a mock email
-            // No password for OAuth users, avatar can be generic or specific
-            avatar: "https://picsum.photos/seed/microsoft/100/100", 
+            email: "bill.gates@example.com", 
+            avatar: "https://picsum.photos/seed/microsoft/100/100",
         };
     }
     
     const userData = { id: microsoftUser.id, name: microsoftUser.name, email: microsoftUser.email, avatar: microsoftUser.avatar };
+    setUser(userData);
+    localStorage.setItem("timewise_user", JSON.stringify(userData));
+    setLoading(false);
+    router.push("/send-event");
+    return true;
+  };
+
+  const loginWithGoogle = async (): Promise<boolean> => {
+    setLoading(true);
+    // Simulate Google OAuth flow
+    await new Promise(resolve => setTimeout(resolve, 1500));
+
+    let googleUser = MOCK_USERS.find(u => u.id === GOOGLE_MOCK_USER_ID);
+    if (!googleUser) {
+        googleUser = {
+            id: GOOGLE_MOCK_USER_ID,
+            name: "Larry Page (GG)",
+            email: "larry.page@example.com",
+            avatar: "https://picsum.photos/seed/google/100/100",
+        };
+    }
+    
+    const userData = { id: googleUser.id, name: googleUser.name, email: googleUser.email, avatar: googleUser.avatar };
     setUser(userData);
     localStorage.setItem("timewise_user", JSON.stringify(userData));
     setLoading(false);
@@ -92,7 +115,7 @@ export const AuthProvider = ({ children }: { children: ReactNode }) => {
   };
 
   return (
-    <AuthContext.Provider value={{ user, login, loginWithMicrosoft, logout, loading, isAuthenticated: !!user }}>
+    <AuthContext.Provider value={{ user, login, loginWithMicrosoft, loginWithGoogle, logout, loading, isAuthenticated: !!user }}>
       {children}
     </AuthContext.Provider>
   );

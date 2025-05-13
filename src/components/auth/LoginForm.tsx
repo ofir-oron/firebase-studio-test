@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState } from "react";
@@ -46,32 +45,24 @@ export function LoginForm() {
         variant: "destructive",
       });
     }
-    setIsLoading(false);
+    // setLoading(false) is handled by navigation or if login fails explicitly here.
+    // If login is successful, navigation occurs, and this component might unmount.
+    // If it remains mounted (e.g. login failed), ensure isLoading is reset.
+    setIsLoading(false); 
   };
 
   const handleOAuthLogin = async (provider: "google" | "microsoft") => {
     if (provider === "google") {
       setIsGoogleLoading(true);
-       // Simulate OAuth call
-      setTimeout(() => {
-        toast({
-          title: "OAuth Login",
-          description: `Google login is not implemented in this demo.`,
-          variant: "default",
-        });
-        setIsGoogleLoading(false);
-      }, 1500);
+      await auth.loginWithGoogle(); // This will handle login, global loading, and navigation
+      // loginWithGoogle (mock) always "succeeds" and navigates.
+      // Reset button spinner state.
+      setIsGoogleLoading(false);
     } else if (provider === "microsoft") {
       setIsMicrosoftLoading(true);
-      const success = await auth.loginWithMicrosoft();
-      if (!success) {
-        toast({
-          title: "Microsoft Login Failed",
-          description: "Could not sign in with Microsoft. Please try again.",
-          variant: "destructive",
-        });
-      }
-      // Navigation is handled by AuthContext
+      await auth.loginWithMicrosoft(); // This will handle login, global loading, and navigation
+      // loginWithMicrosoft (mock) always "succeeds" and navigates.
+      // Reset button spinner state.
       setIsMicrosoftLoading(false);
     }
   };
