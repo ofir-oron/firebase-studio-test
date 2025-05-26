@@ -11,7 +11,7 @@ export default function LoginPage() {
       </div>
       <Card className="w-full max-w-md shadow-xl">
         <CardHeader>
-          <CardTitle className="text-2xl">Welcome Back!</CardTitle>
+          <CardTitle className="text-2xl">Welcome Back</CardTitle>
           <CardDescription>Sign in to manage your time off.</CardDescription>
         </CardHeader>
         <CardContent>
