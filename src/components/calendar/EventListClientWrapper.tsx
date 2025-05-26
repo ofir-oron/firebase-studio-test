@@ -18,13 +18,8 @@ export function EventListClientWrapper() {
       setIsLoading(true);
       try {
         const userEventsData = await getUserEvents(user.id);
-        // Ensure dates are Date objects
-        const processedEvents = userEventsData.map(e => ({
-          ...e,
-          startDate: new Date(e.startDate),
-          endDate: new Date(e.endDate)
-        }));
-        setEvents(processedEvents);
+        // Assuming getUserEvents returns events with Date objects already correctly typed
+        setEvents(userEventsData);
       } catch (error) {
         console.error("Failed to fetch user events:", error);
         setEvents([]); // Set to empty array on error

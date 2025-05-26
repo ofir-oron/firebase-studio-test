@@ -6,7 +6,7 @@ import type { CalendarEvent, EventType, EventTypeKey, MailingList } from "@/lib/
 import { EVENT_TYPES, MAILING_LISTS } from "@/lib/constants";
 import { useAuth } from "@/hooks/useAuth";
 import { useToast } from "@/hooks/use-toast";
-import { format, addDays } from "date-fns";
+import { format, addDays, isSameDay } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
@@ -73,11 +73,12 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
   const watchedAdditionalText = watch("additionalText");
 
   useEffect(() => {
-    setEvents((initialEvents || []).map(e => ({...e, startDate: new Date(e.startDate), endDate: new Date(e.endDate)})));
+    // initialEvents from props should now have correct Date objects
+    setEvents(initialEvents || []);
   }, [initialEvents]);
 
   useEffect(() => {
-    if (selectedEvent && user && watchedDateRange?.from && watchedEventType) {
+    if (selectedEvent && user && watchedDateRange?.from && watchedEventType && selectedEvent.startDate instanceof Date && selectedEvent.endDate instanceof Date) {
       const eventTypeLabel = EVENT_TYPES.find(et => et.value === watchedEventType)?.label || watchedEventType;
       const dateStr = watchedDateRange.to && watchedDateRange.from.getTime() !== watchedDateRange.to.getTime()
         ? `${format(new Date(watchedDateRange.from), "MMM d")} - ${format(new Date(watchedDateRange.to), "MMM d, yyyy")}`
@@ -101,7 +102,7 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
     setSelectedEvent(event);
     reset({
       id: event.id,
-      dateRange: { from: new Date(event.startDate), to: new Date(event.endDate) },
+      dateRange: { from: event.startDate, to: event.endDate }, // Should be Date objects
       eventType: event.eventType,
       title: event.title,
       additionalText: event.additionalText || "",
@@ -176,6 +177,10 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
       </div>
       {events.map((event) => {
         const eventTypeDetails = getEventTypeDetails(event.eventType);
+        // Ensure startDate and endDate are Date objects before formatting
+        const startDate = event.startDate instanceof Date ? event.startDate : new Date(event.startDate);
+        const endDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
+
         return (
           <Card key={event.id} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
             <CardHeader className="flex flex-row items-start bg-muted/50 gap-4 p-4">
@@ -185,7 +190,7 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
               <div className="flex-1">
                 <CardTitle className="text-lg">{event.title}</CardTitle>
                 <CardDescription>
-                  {format(new Date(event.startDate), "EEE, MMM d, yyyy")} - {format(new Date(event.endDate), "EEE, MMM d, yyyy")}
+                  {format(startDate, "EEE, MMM d, yyyy")} - {format(endDate, "EEE, MMM d, yyyy")}
                 </CardDescription>
               </div>
                <div className="flex space-x-2">
@@ -259,11 +264,11 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
                             className={cn("w-full justify-start text-left font-normal", !field.value?.from && "text-muted-foreground")}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
-                            {field.value?.from ? (field.value.to ? (<>{format(new Date(field.value.from), "LLL dd, y")} - {format(new Date(field.value.to), "LLL dd, y")}</>) : format(new Date(field.value.from), "LLL dd, y")) : (<span>Pick a date range</span>)}
+                            {field.value?.from ? (field.value.to ? (<>{format(field.value.from, "LLL dd, y")} - {format(field.value.to, "LLL dd, y")}</>) : format(field.value.from, "LLL dd, y")) : (<span>Pick a date range</span>)}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarWidget initialFocus mode="range" defaultMonth={field.value?.from ? new Date(field.value.from) : new Date()} selected={field.value?.from ? { from: new Date(field.value.from), to: field.value.to ? new Date(field.value.to) : undefined } : undefined} onSelect={(range) => field.onChange(range || { from: new Date(), to: new Date() })} numberOfMonths={1} disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, new Date()) }/>
+                          <CalendarWidget initialFocus mode="range" defaultMonth={field.value?.from} selected={field.value?.from ? { from: field.value.from, to: field.value.to } : undefined} onSelect={(range) => field.onChange(range || { from: new Date(), to: new Date() })} numberOfMonths={1} disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, new Date()) }/>
                         </PopoverContent>
                       </Popover>
                     )}
@@ -342,11 +347,4 @@ const FormFieldItem: React.FC<{ children: React.ReactNode, error?: string, class
     {error && <p className="text-sm text-destructive">{error}</p>}
   </div>
 );
-
-function isSameDay(date1: Date, date2: Date): boolean {
-  return date1.getFullYear() === date2.getFullYear() &&
-         date1.getMonth() === date2.getMonth() &&
-         date1.getDate() === date2.getDate();
-}
-
     
