@@ -1,12 +1,12 @@
 
 // TODO: Replace with your actual Firebase project configuration
 const firebaseConfig = {
-  apiKey: "YOUR_API_KEY",
-  authDomain: "YOUR_AUTH_DOMAIN",
-  projectId: "YOUR_PROJECT_ID",
-  storageBucket: "YOUR_STORAGE_BUCKET",
-  messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
-  appId: "YOUR_APP_ID"
+  apiKey: "AIzaSyB5yg-SqnGSS-l8QmnER8rTqjeWe_oLyOo",
+  authDomain: "timewise-dxtlj.firebaseapp.com",
+  projectId: "timewise-dxtlj",
+  storageBucket: "timewise-dxtlj.firebasestorage.app",
+  messagingSenderId: "556973799121",
+  appId: "1:556973799121:web:e3ad7bc5eafd7ac017f7f0"
 };
 
 // Import the functions you need from the SDKs you need

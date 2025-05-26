@@ -10,7 +10,7 @@ import { format, addDays } from "date-fns";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger, DialogFooter, DialogClose } from "@/components/ui/dialog";
-import { Calendar as CalendarWidget } from "@/components/ui/calendar"; // Renamed to avoid conflict
+import { Calendar as CalendarWidget } from "@/components/ui/calendar";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
@@ -18,15 +18,16 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from "@/components/ui/alert-dialog";
-import { updateCalendarEvent, deleteCalendarEvent, getUserEvents } from "@/lib/actions";
+import { updateCalendarEvent, deleteCalendarEvent } from "@/lib/actions";
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { CalendarIcon, Edit3, Loader2, Trash2, Filter, RotateCcw } from "lucide-react";
+import { CalendarIcon, Edit3, Loader2, Trash2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EventListProps {
   initialEvents: CalendarEvent[];
+  onRefresh: () => Promise<void>;
 }
 
 const getEventSchema = (eventTypes: EventType[]) => z.object({
@@ -49,15 +50,16 @@ const getEventSchema = (eventTypes: EventType[]) => z.object({
 
 type EventFormValues = z.infer<ReturnType<typeof getEventSchema>>;
 
-export function EventList({ initialEvents }: EventListProps) {
+export function EventList({ initialEvents, onRefresh }: EventListProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents.map(e => ({...e, startDate: new Date(e.startDate), endDate: new Date(e.endDate)})));
+  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
   const [isUpdating, setIsUpdating] = useState(false);
-  const [isLoadingEvents, setIsLoadingEvents] = useState(false);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+
 
   const eventSchema = getEventSchema(EVENT_TYPES);
   const form = useForm<EventFormValues>({
@@ -69,6 +71,10 @@ export function EventList({ initialEvents }: EventListProps) {
   const watchedDateRange = watch("dateRange");
   const watchedEventType = watch("eventType");
   const watchedAdditionalText = watch("additionalText");
+
+  useEffect(() => {
+    setEvents(initialEvents.map(e => ({...e, startDate: new Date(e.startDate), endDate: new Date(e.endDate)})));
+  }, [initialEvents]);
 
   useEffect(() => {
     if (selectedEvent && user && watchedDateRange?.from && watchedEventType) {
@@ -85,20 +91,11 @@ export function EventList({ initialEvents }: EventListProps) {
     }
   }, [user, selectedEvent, watchedDateRange, watchedEventType, watchedAdditionalText, setValue]);
 
-  const fetchEvents = async () => {
-    if (!user) return;
-    setIsLoadingEvents(true);
-    const userEvents = await getUserEvents(user.id);
-    setEvents(userEvents.map(e => ({...e, startDate: new Date(e.startDate), endDate: new Date(e.endDate)})));
-    setIsLoadingEvents(false);
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await onRefresh();
+    setIsRefreshing(false);
   };
-
-  useEffect(() => {
-    if (user) {
-      fetchEvents(); // Initial fetch if not pre-loaded or to refresh
-    }
-  }, [user]);
-
 
   const handleEdit = (event: CalendarEvent) => {
     setSelectedEvent(event);
@@ -132,7 +129,7 @@ export function EventList({ initialEvents }: EventListProps) {
     const result = await updateCalendarEvent(formData);
     if (result.success) {
       toast({ title: "Event Updated", description: result.message });
-      fetchEvents(); // Re-fetch events
+      await onRefresh();
       setIsEditDialogOpen(false);
     } else {
       toast({ title: "Error Updating Event", description: result.message, variant: "destructive" });
@@ -146,7 +143,7 @@ export function EventList({ initialEvents }: EventListProps) {
     const result = await deleteCalendarEvent(eventId, user.id);
     if (result.success) {
       toast({ title: "Event Deleted", description: result.message });
-      fetchEvents(); // Re-fetch events
+      await onRefresh();
     } else {
       toast({ title: "Error Deleting Event", description: result.message, variant: "destructive" });
     }
@@ -157,10 +154,6 @@ export function EventList({ initialEvents }: EventListProps) {
     return EVENT_TYPES.find(et => et.value === typeKey) || EVENT_TYPES[0];
   };
 
-  if (isLoadingEvents && events.length === 0) {
-     return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading events...</span></div>;
-  }
-
   if (events.length === 0) {
     return <p className="text-center text-muted-foreground py-8">You have no scheduled events.</p>;
   }
@@ -168,8 +161,8 @@ export function EventList({ initialEvents }: EventListProps) {
   return (
     <div className="space-y-4">
        <div className="flex justify-end">
-        <Button onClick={fetchEvents} variant="outline" size="sm" disabled={isLoadingEvents}>
-          <RotateCcw className={`mr-2 h-4 w-4 ${isLoadingEvents ? 'animate-spin' : ''}`} />
+        <Button onClick={handleRefresh} variant="outline" size="sm" disabled={isRefreshing}>
+          <RotateCcw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           Refresh Events
         </Button>
       </div>
