@@ -1,5 +1,5 @@
 
-import type { EventType, MailingList } from '@/lib/types';
+import type { EventType, MailingList, CalendarEvent } from '@/lib/types'; // CalendarEvent import
 import { Activity, Baby, Plane, CalendarClock, MapPin, ChevronsUp, ChevronsDown, Shield } from 'lucide-react';
 
 export const APP_NAME = "TimeWise";
@@ -21,15 +21,12 @@ export const MAILING_LISTS: MailingList[] = [
   { id: "hr_department", name: "HR Department", emails: ["hr@example.com"] },
 ];
 
-export const MOCK_USERS = [
-  { id: "user1", name: "Alice Wonderland", email: "alice@example.com", password: "password123", avatar: "https://picsum.photos/seed/alice/100/100" },
-  { id: "user2", name: "Bob The Builder", email: "bob@example.com", password: "password456", avatar: "https://picsum.photos/seed/bob/100/100" },
-];
+// MOCK_USERS are removed as authentication will be handled by Firebase.
 
 export const MOCK_EVENTS: CalendarEvent[] = [
   {
     id: "event1",
-    userId: "user1",
+    userId: "mockUser1FirebaseUid", // Replace with a placeholder or remove if events are fetched from a real DB
     title: "Alice Wonderland - Vacation",
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 10),
     endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 15),
@@ -42,7 +39,7 @@ export const MOCK_EVENTS: CalendarEvent[] = [
   },
   {
     id: "event2",
-    userId: "user1",
+    userId: "mockUser1FirebaseUid", // Replace with a placeholder or remove
     title: "Alice Wonderland - Sick Day",
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 20),
     endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 20),

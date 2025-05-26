@@ -2,10 +2,10 @@
 import type { LucideIcon } from 'lucide-react';
 
 export interface User {
-  id: string;
-  name: string;
-  email: string;
-  avatar?: string; // URL to avatar image
+  id: string; // Firebase UID
+  name: string | null; // Firebase displayName, can be null
+  email: string | null; // Firebase email, can be null
+  avatar?: string | null; // Firebase photoURL, can be null
 }
 
 export type EventTypeKey = 
