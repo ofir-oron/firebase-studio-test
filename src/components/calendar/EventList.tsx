@@ -26,7 +26,7 @@ import { CalendarIcon, Edit3, Loader2, Trash2, RotateCcw } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EventListProps {
-  initialEvents: CalendarEvent[];
+  initialEvents: CalendarEvent[] | null; // Allow null for initial state
   onRefresh: () => Promise<void>;
 }
 
@@ -53,7 +53,7 @@ type EventFormValues = z.infer<ReturnType<typeof getEventSchema>>;
 export function EventList({ initialEvents, onRefresh }: EventListProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents);
+  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents || []);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -73,7 +73,7 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
   const watchedAdditionalText = watch("additionalText");
 
   useEffect(() => {
-    setEvents(initialEvents.map(e => ({...e, startDate: new Date(e.startDate), endDate: new Date(e.endDate)})));
+    setEvents((initialEvents || []).map(e => ({...e, startDate: new Date(e.startDate), endDate: new Date(e.endDate)})));
   }, [initialEvents]);
 
   useEffect(() => {
@@ -155,7 +155,15 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
   };
 
   if (events.length === 0) {
-    return <p className="text-center text-muted-foreground py-8">You have no scheduled events.</p>;
+    return (
+      <div className="text-center py-8">
+        <p className="text-muted-foreground">You have no scheduled events.</p>
+        <Button onClick={handleRefresh} variant="outline" size="sm" className="mt-4" disabled={isRefreshing}>
+          <RotateCcw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
+          Refresh Events
+        </Button>
+      </div>
+    );
   }
 
   return (
@@ -248,14 +256,14 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
                           <Button
                             id="editDateRange"
                             variant={"outline"}
-                            className={cn("w-full justify-start text-left font-normal", !field.value && "text-muted-foreground")}
+                            className={cn("w-full justify-start text-left font-normal", !field.value?.from && "text-muted-foreground")}
                           >
                             <CalendarIcon className="mr-2 h-4 w-4" />
                             {field.value?.from ? (field.value.to ? (<>{format(new Date(field.value.from), "LLL dd, y")} - {format(new Date(field.value.to), "LLL dd, y")}</>) : format(new Date(field.value.from), "LLL dd, y")) : (<span>Pick a date range</span>)}
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarWidget initialFocus mode="range" defaultMonth={new Date(field.value.from)} selected={{ from: new Date(field.value.from), to: field.value.to ? new Date(field.value.to) : undefined }} onSelect={(range) => field.onChange(range || { from: new Date(), to: new Date() })} numberOfMonths={1} disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, new Date()) }/>
+                          <CalendarWidget initialFocus mode="range" defaultMonth={field.value?.from ? new Date(field.value.from) : new Date()} selected={field.value?.from ? { from: new Date(field.value.from), to: field.value.to ? new Date(field.value.to) : undefined } : undefined} onSelect={(range) => field.onChange(range || { from: new Date(), to: new Date() })} numberOfMonths={1} disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, new Date()) }/>
                         </PopoverContent>
                       </Popover>
                     )}
@@ -340,3 +348,5 @@ function isSameDay(date1: Date, date2: Date): boolean {
          date1.getMonth() === date2.getMonth() &&
          date1.getDate() === date2.getDate();
 }
+
+    
