@@ -17,34 +17,47 @@ export function EventListClientWrapper() {
     if (user?.id) {
       setIsLoading(true);
       try {
+        console.log("[EventListClientWrapper] Fetching events for userId:", user.id);
         const userEventsData = await getUserEvents(user.id);
-        // Assuming getUserEvents returns events with Date objects already correctly typed
+        console.log("[EventListClientWrapper] Received events data from getUserEvents:", userEventsData);
         setEvents(userEventsData);
       } catch (error) {
-        console.error("Failed to fetch user events:", error);
-        setEvents([]); // Set to empty array on error
+        console.error("[EventListClientWrapper] Failed to fetch user events:", error);
+        setEvents([]); 
       } finally {
         setIsLoading(false);
       }
     } else if (!authLoading && !user) {
+      console.log("[EventListClientWrapper] No authenticated user found after auth check. Setting events to empty array.");
       setEvents([]); 
+      setIsLoading(false);
+    } else if (authLoading) {
+      console.log("[EventListClientWrapper] Auth is still loading, deferring event fetch.");
+      // Do nothing, wait for authLoading to be false
+    } else if (user && !user.id) {
+      console.warn("[EventListClientWrapper] User object present, but user.id is missing. Cannot fetch events.");
+      setEvents([]);
       setIsLoading(false);
     }
   }, [user, authLoading]);
 
   useEffect(() => {
+    console.log("[EventListClientWrapper] useEffect triggered. authLoading:", authLoading);
     if (!authLoading) {
       fetchUserEvents();
     }
   }, [authLoading, fetchUserEvents]);
 
   if (authLoading || isLoading || events === null) {
+    // Initial loading state or if events haven't been fetched yet (events is null)
+    // Or if auth is still loading, or if events are actively being loaded (isLoading is true)
     return <div className="flex items-center justify-center p-8"><Loader2 className="h-8 w-8 animate-spin text-primary" /> <span className="ml-2">Loading events...</span></div>;
   }
 
-  if (!user) {
+  if (!user) { // This should ideally be caught by isLoading or events === null if fetchUserEvents sets events to []
     return <p className="text-center text-muted-foreground py-8">Please log in to see your events.</p>;
   }
   
+  // If events is an empty array, EventList will show "You have no scheduled events."
   return <EventList initialEvents={events} onRefresh={fetchUserEvents} />;
 }
