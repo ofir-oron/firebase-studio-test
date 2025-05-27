@@ -21,13 +21,14 @@ export const MAILING_LISTS: MailingList[] = [
   { id: "hr_department", name: "HR Department", emails: ["hr@example.com"] },
 ];
 
-// MOCK_USERS are removed as authentication will be handled by Firebase.
-
+// MOCK_EVENTS are no longer the primary source for live data,
+// as events will be stored in Firestore.
+// This can be kept for reference or potential seeding scripts.
 export const MOCK_EVENTS: CalendarEvent[] = [
   {
-    id: "event1",
-    userId: "mockUser1FirebaseUid", // Replace with a placeholder or remove if events are fetched from a real DB
-    title: "Alice Wonderland - Vacation",
+    id: "event1_mock", // Mock IDs should be distinct if ever used for seeding
+    userId: "mockUser1FirebaseUid", 
+    title: "Alice Wonderland - Vacation (Mock)",
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 10),
     endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 15),
     eventType: "vacation",
@@ -35,12 +36,12 @@ export const MOCK_EVENTS: CalendarEvent[] = [
     recipients: ["managers"],
     createdAt: new Date(),
     updatedAt: new Date(),
-    additionalText: "Trip to Hawaii!"
+    additionalText: "Trip to Hawaii! (Mock)"
   },
   {
-    id: "event2",
-    userId: "mockUser1FirebaseUid", // Replace with a placeholder or remove
-    title: "Alice Wonderland - Sick Day",
+    id: "event2_mock",
+    userId: "mockUser1FirebaseUid",
+    title: "Alice Wonderland - Sick Day (Mock)",
     startDate: new Date(new Date().getFullYear(), new Date().getMonth(), 20),
     endDate: new Date(new Date().getFullYear(), new Date().getMonth(), 20),
     eventType: "sick_day",
