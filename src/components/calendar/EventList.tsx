@@ -22,7 +22,7 @@ import { updateCalendarEvent, deleteCalendarEvent } from "@/lib/actions";
 import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
-import { CalendarIcon, Edit3, Loader2, Trash2, RotateCcw } from "lucide-react";
+import { CalendarIcon, Edit3, Loader2, Trash2, RotateCcw, AlertCircle } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 interface EventListProps {
@@ -53,7 +53,7 @@ type EventFormValues = z.infer<ReturnType<typeof getEventSchema>>;
 export function EventList({ initialEvents, onRefresh }: EventListProps) {
   const { user } = useAuth();
   const { toast } = useToast();
-  const [events, setEvents] = useState<CalendarEvent[]>(initialEvents || []);
+  const [events, setEvents] = useState<CalendarEvent[]>([]);
   const [selectedEvent, setSelectedEvent] = useState<CalendarEvent | null>(null);
   const [isEditDialogOpen, setIsEditDialogOpen] = useState(false);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -73,12 +73,27 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
   const watchedAdditionalText = watch("additionalText");
 
   useEffect(() => {
-    // initialEvents from props should now have correct Date objects
-    setEvents(initialEvents || []);
+    if (initialEvents) {
+      // Ensure all events have valid Date objects for startDate and endDate
+      const processedEvents = initialEvents.map(event => {
+        const startDate = event.startDate instanceof Date ? event.startDate : new Date(event.startDate);
+        const endDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
+
+        if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+          console.error(`EventList rendering: event.startDate or event.endDate is not a Date object for event ID ${event.id}. Title: ${event.title}. Raw startDate: ${event.startDate}, Raw endDate: ${event.endDate}`);
+          // Potentially filter out this event or mark it as erroneous
+          return { ...event, _hasDateError: true, startDate: new Date(NaN), endDate: new Date(NaN) }; // Mark error
+        }
+        return { ...event, startDate, endDate, _hasDateError: false };
+      });
+      setEvents(processedEvents as CalendarEvent[]); // Cast back, _hasDateError is temporary for processing
+    } else {
+      setEvents([]);
+    }
   }, [initialEvents]);
 
   useEffect(() => {
-    if (selectedEvent && user && watchedDateRange?.from && watchedEventType && selectedEvent.startDate instanceof Date && selectedEvent.endDate instanceof Date) {
+    if (selectedEvent && user && watchedDateRange?.from && watchedEventType && selectedEvent.startDate instanceof Date && selectedEvent.endDate instanceof Date && !isNaN(selectedEvent.startDate.getTime()) && !isNaN(selectedEvent.endDate.getTime())) {
       const eventTypeLabel = EVENT_TYPES.find(et => et.value === watchedEventType)?.label || watchedEventType;
       const dateStr = watchedDateRange.to && watchedDateRange.from.getTime() !== watchedDateRange.to.getTime()
         ? `${format(new Date(watchedDateRange.from), "MMM d")} - ${format(new Date(watchedDateRange.to), "MMM d, yyyy")}`
@@ -99,10 +114,14 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
   };
 
   const handleEdit = (event: CalendarEvent) => {
+    if (!(event.startDate instanceof Date) || !(event.endDate instanceof Date) || isNaN(event.startDate.getTime()) || isNaN(event.endDate.getTime())) {
+        toast({ title: "Error", description: "Cannot edit event with invalid dates.", variant: "destructive"});
+        return;
+    }
     setSelectedEvent(event);
     reset({
       id: event.id,
-      dateRange: { from: event.startDate, to: event.endDate }, // Should be Date objects
+      dateRange: { from: event.startDate, to: event.endDate }, 
       eventType: event.eventType,
       title: event.title,
       additionalText: event.additionalText || "",
@@ -157,9 +176,14 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
 
   if (events.length === 0) {
     return (
-      <div className="text-center py-8">
-        <p className="text-muted-foreground">You have no scheduled events.</p>
-        <Button onClick={handleRefresh} variant="outline" size="sm" className="mt-4" disabled={isRefreshing}>
+      <div className="text-center py-8 px-4">
+        <AlertCircle className="mx-auto h-12 w-12 text-muted-foreground mb-4" />
+        <p className="text-muted-foreground text-lg mb-2">You have no scheduled events.</p>
+        <p className="text-sm text-muted-foreground mb-4">
+          If you've recently added events and they aren't appearing, try refreshing.
+          If the issue persists, there might be a delay or a configuration issue with data fetching.
+        </p>
+        <Button onClick={handleRefresh} variant="outline" size="sm" className="mt-2" disabled={isRefreshing}>
           <RotateCcw className={`mr-2 h-4 w-4 ${isRefreshing ? 'animate-spin' : ''}`} />
           Refresh Events
         </Button>
@@ -176,10 +200,25 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
         </Button>
       </div>
       {events.map((event) => {
+        // @ts-ignore _hasDateError is a temporary processing flag
+        if (event._hasDateError || !(event.startDate instanceof Date) || !(event.endDate instanceof Date) || isNaN(event.startDate.getTime()) || isNaN(event.endDate.getTime())) {
+          return (
+            <Card key={event.id || `error-${Math.random()}`} className="overflow-hidden shadow-md border-destructive">
+              <CardHeader className="flex flex-row items-start bg-destructive/10 gap-4 p-4">
+                 <AlertCircle className="h-6 w-6 text-destructive" />
+                <div className="flex-1">
+                  <CardTitle className="text-lg text-destructive">Error Displaying Event</CardTitle>
+                  <CardDescription className="text-destructive/80">
+                    This event (ID: {event.id || 'N/A'}) could not be displayed due to invalid date information.
+                  </CardDescription>
+                </div>
+              </CardHeader>
+            </Card>
+          );
+        }
         const eventTypeDetails = getEventTypeDetails(event.eventType);
-        // Ensure startDate and endDate are Date objects before formatting
-        const startDate = event.startDate instanceof Date ? event.startDate : new Date(event.startDate);
-        const endDate = event.endDate instanceof Date ? event.endDate : new Date(event.endDate);
+        const startDate = event.startDate; // Already confirmed as Date object
+        const endDate = event.endDate; // Already confirmed as Date object
 
         return (
           <Card key={event.id} className="overflow-hidden shadow-md hover:shadow-lg transition-shadow">
@@ -268,7 +307,7 @@ export function EventList({ initialEvents, onRefresh }: EventListProps) {
                           </Button>
                         </PopoverTrigger>
                         <PopoverContent className="w-auto p-0" align="start">
-                          <CalendarWidget initialFocus mode="range" defaultMonth={field.value?.from} selected={field.value?.from ? { from: field.value.from, to: field.value.to } : undefined} onSelect={(range) => field.onChange(range || { from: new Date(), to: new Date() })} numberOfMonths={1} disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, new Date()) }/>
+                          <CalendarWidget initialFocus mode="range" defaultMonth={field.value?.from} selected={field.value?.from ? { from: field.value.from, to: field.value.to } : undefined} onSelect={(range) => field.onChange(range || { from: new Date(), to: new Date() })} numberOfMonths={1} disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, addDays(new Date(), -1)) }/>
                         </PopoverContent>
                       </Popover>
                     )}
@@ -347,4 +386,5 @@ const FormFieldItem: React.FC<{ children: React.ReactNode, error?: string, class
     {error && <p className="text-sm text-destructive">{error}</p>}
   </div>
 );
+    
     
