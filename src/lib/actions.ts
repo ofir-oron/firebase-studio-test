@@ -38,16 +38,60 @@ const eventSchemaBase = z.object({
 const createEventSchema = eventSchemaBase;
 const updateEventSchema = eventSchemaBase.extend({ id: z.string() });
 
-// Helper to convert Firestore Timestamps in an event object to JS Dates
-const convertTimestampsToDates = (eventData: any): CalendarEvent => {
-  return {
-    ...eventData,
-    id: eventData.id, // id is passed explicitly as it's the doc ID
-    startDate: (eventData.startDate instanceof Timestamp) ? eventData.startDate.toDate() : new Date(eventData.startDate as string), // Added fallback for string dates if not Timestamp
-    endDate: (eventData.endDate instanceof Timestamp) ? eventData.endDate.toDate() : new Date(eventData.endDate as string), // Added fallback
-    createdAt: (eventData.createdAt instanceof Timestamp) ? eventData.createdAt.toDate() : new Date(eventData.createdAt as string), // Added fallback
-    updatedAt: (eventData.updatedAt instanceof Timestamp) ? eventData.updatedAt.toDate() : new Date(eventData.updatedAt as string), // Added fallback
-  } as CalendarEvent;
+// Helper to convert Firestore Timestamps/strings in an event object to JS Dates
+const convertTimestampsToDates = (eventData: any, docId: string): CalendarEvent | null => {
+  const logPrefix = `[actions.convertTimestampsToDates for doc ${docId}]`;
+
+  const convertField = (fieldValue: any, fieldName: string): Date => {
+    if (fieldValue instanceof Timestamp) {
+      // console.log(`${logPrefix} '${fieldName}' is a Timestamp. Converting.`);
+      return fieldValue.toDate();
+    }
+    if (typeof fieldValue === 'string') {
+      // console.log(`${logPrefix} '${fieldName}' is a string ('${fieldValue}'). Attempting to parse as Date.`);
+      const d = new Date(fieldValue);
+      if (isNaN(d.getTime())) {
+        console.warn(`${logPrefix} Failed to parse '${fieldName}' string to a valid Date: '${fieldValue}'`);
+        return new Date(NaN); // Return an invalid date explicitly
+      }
+      return d;
+    }
+    // Handle cases where data might be a plain object from Firestore if not directly a Timestamp (e.g. after JSON stringify/parse)
+    if (fieldValue && typeof fieldValue === 'object' && typeof fieldValue.seconds === 'number' && typeof fieldValue.nanoseconds === 'number') {
+      // console.log(`${logPrefix} '${fieldName}' looks like a Firestore Timestamp-like object. Converting.`);
+      return new Timestamp(fieldValue.seconds, fieldValue.nanoseconds).toDate();
+    }
+    console.warn(`${logPrefix} '${fieldName}' is not a Timestamp, string, or Timestamp-like object. Value:`, fieldValue, `Type: ${typeof fieldValue}`);
+    return new Date(NaN); // Return an invalid date for other types
+  };
+
+  const startDate = convertField(eventData.startDate, "startDate");
+  const endDate = convertField(eventData.endDate, "endDate");
+  
+  // Critical check: if startDate or endDate are invalid, the event is unusable for display.
+  if (isNaN(startDate.getTime()) || isNaN(endDate.getTime())) {
+    console.error(`${logPrefix} Event has invalid startDate or endDate after conversion. Raw startDate: ${JSON.stringify(eventData.startDate)}, Raw endDate: ${JSON.stringify(eventData.endDate)}. Converted startDate: ${startDate}, Converted endDate: ${endDate}. Skipping event.`);
+    return null;
+  }
+
+  const createdAt = convertField(eventData.createdAt, "createdAt");
+  const updatedAt = convertField(eventData.updatedAt, "updatedAt");
+
+  // Ensure all fields of CalendarEvent are present
+  const result: CalendarEvent = {
+    id: docId,
+    userId: eventData.userId,
+    title: eventData.title,
+    eventType: eventData.eventType,
+    additionalText: eventData.additionalText,
+    isFullDay: eventData.isFullDay,
+    recipients: eventData.recipients,
+    startDate,
+    endDate,
+    createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt, // Fallback for non-critical dates
+    updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt, // Fallback
+  };
+  return result;
 };
 
 
@@ -75,25 +119,24 @@ export async function createCalendarEvent(formData: FormData) {
 
     const docRef = await addDoc(collection(db, "events"), eventToStore);
     
-    // Construct the event object as it would be after fetching and converting timestamps
     const newEventForClient: CalendarEvent = {
       id: docRef.id,
       userId: validatedData.userId,
       title: validatedData.title,
       eventType: validatedData.eventType as any, 
-      startDate: validatedData.startDate, // JS Date
-      endDate: validatedData.endDate, // JS Date
+      startDate: validatedData.startDate, 
+      endDate: validatedData.endDate, 
       isFullDay: validatedData.isFullDay,
       additionalText: validatedData.additionalText,
       recipients: validatedData.recipients,
-      createdAt: new Date(), // Approximate, actual value is serverTimestamp
-      updatedAt: new Date(), // Approximate
+      createdAt: new Date(), 
+      updatedAt: new Date(), 
     };
 
     console.log("[actions.createCalendarEvent] Event created in Firestore with ID:", docRef.id);
     
     revalidatePath("/calendar-overview");
-    revalidatePath("/send-event"); // revalidate send-event if needed, or remove if not
+    revalidatePath("/send-event"); 
 
     return { success: true, message: "Event created successfully!", event: newEventForClient };
   } catch (error) {
@@ -128,17 +171,15 @@ export async function updateCalendarEvent(formData: FormData) {
       endDate: Timestamp.fromDate(validatedData.endDate),
       updatedAt: serverTimestamp(),
     };
-    // remove id from update payload as it's part of the doc ref.
     const { id, ...updatePayload } = eventToUpdate;
 
 
     await updateDoc(eventRef, updatePayload);
-
-    // Construct the event object as it would be after fetching and converting timestamps
+    
     const updatedEventForClient: CalendarEvent = {
-      ...validatedData, // has JS dates
-      createdAt: new Date(), // This would ideally be the original createdAt, not new Date()
-      updatedAt: new Date(), // Approximate
+      ...validatedData, 
+      createdAt: new Date(), 
+      updatedAt: new Date(), 
     };
     
     console.log("[actions.updateCalendarEvent] Event updated in Firestore:", validatedData.id);
@@ -158,8 +199,6 @@ export async function updateCalendarEvent(formData: FormData) {
 
 export async function deleteCalendarEvent(eventId: string, userId: string) {
   try {
-    // Optional: Add a check here to ensure the event belongs to the user before deleting,
-    // though Firestore rules should also enforce this.
     const eventRef = doc(db, "events", eventId);
     await deleteDoc(eventRef);
     console.log("[actions.deleteCalendarEvent] Event deleted from Firestore:", eventId);
@@ -187,29 +226,23 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
     const userEvents: CalendarEvent[] = [];
     querySnapshot.forEach((docSnap) => {
       const eventData = docSnap.data();
-      console.log(`[actions.getUserEvents] Raw data for doc ${docSnap.id}:`, JSON.stringify(eventData)); // Log raw data
-      console.log(`[actions.getUserEvents] Document userId from Firestore: '${eventData.userId}', Query userId: '${userId}'`); // Log userId from doc
+      // Minimal log for raw data to avoid excessive logging if stringify is problematic.
+      console.log(`[actions.getUserEvents] Processing doc ${docSnap.id}. userId from doc: '${eventData.userId}'. Query userId: '${userId}'.`);
 
-      try {
-        const convertedEvent = convertTimestampsToDates({ ...eventData, id: docSnap.id });
-        
-        // Stricter check for valid Date objects after conversion
-        if (convertedEvent.startDate instanceof Date && !isNaN(convertedEvent.startDate.getTime()) &&
-            convertedEvent.endDate instanceof Date && !isNaN(convertedEvent.endDate.getTime())) {
-          userEvents.push(convertedEvent);
-        } else {
-          console.warn(`[actions.getUserEvents] Skipped event ${docSnap.id} for userId '${userId}' due to invalid/missing dates after conversion. Raw startDate: ${eventData.startDate}, Raw endDate: ${eventData.endDate}. Converted startDate: ${convertedEvent.startDate}, Converted endDate: ${convertedEvent.endDate}`);
-        }
-      } catch (e) {
-          console.error(`[actions.getUserEvents] Error converting event ${docSnap.id} for userId '${userId}':`, e);
+      const convertedEvent = convertTimestampsToDates(eventData, docSnap.id);
+
+      if (convertedEvent) {
+        userEvents.push(convertedEvent);
+      } else {
+        // Specific error already logged in convertTimestampsToDates
+        console.warn(`[actions.getUserEvents] Event ${docSnap.id} for userId '${userId}' was skipped due to critical conversion errors (e.g., invalid startDate/endDate). Check previous logs from 'convertTimestampsToDates'.`);
       }
     });
     
-    console.log(`[actions.getUserEvents] Successfully processed and converted ${userEvents.length} events for userId '${userId}'.`);
+    console.log(`[actions.getUserEvents] Successfully processed. Returning ${userEvents.length} events for userId '${userId}'.`);
     return userEvents;
   } catch (error) {
     console.error(`[actions.getUserEvents] Error fetching/processing user events from Firestore for userId '${userId}':`, error);
-    // Check if it's a Firebase permission error specifically
     if (typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 'permission-denied') {
         console.error(`[actions.getUserEvents] Firestore permission denied for userId '${userId}'. Check your Firestore security rules.`);
     }
@@ -219,8 +252,7 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
 
 // Mailing list actions remain in-memory for now
 export async function getMailingLists(): Promise<MailingList[]> {
-  // Simulate async fetch if these were from a DB
-  await new Promise(res => setTimeout(res, 300)); // Simulate network delay
+  await new Promise(res => setTimeout(res, 300)); 
   return mailingLists;
 }
 
@@ -228,28 +260,24 @@ export async function saveMailingLists(formData: FormData) {
   const newListName = formData.get("newListName") as string;
   const newListEmailsRaw = formData.get("newListEmails") as string; 
 
-  // This is just an example for in-memory, a real DB would handle updates/deletes differently
   try {
-    // For this example, we'll just focus on adding new lists from FormData
-    // A real implementation would handle updates to existing lists or deletions
     if (newListName && newListEmailsRaw) {
       const emails = newListEmailsRaw.split(',').map(e => e.trim()).filter(e => z.string().email().safeParse(e).success);
       if (emails.length > 0) {
         const newList: MailingList = {
-          id: `ml_${Date.now()}_${Math.random().toString(36).substring(2,7)}`, // More unique ID
+          id: `ml_${Date.now()}_${Math.random().toString(36).substring(2,7)}`,
           name: newListName,
           emails: emails,
         };
         mailingLists.push(newList);
         console.log("[actions.saveMailingLists] New mailing list added (in-memory):", newList);
-      } else if (newListEmailsRaw) { // Only throw error if emails were provided but all were invalid
+      } else if (newListEmailsRaw) { 
          throw new Error("Invalid email format in new list. All provided emails were invalid.");
       }
     }
     
-    // Simulate saving to a persistent store
     await new Promise(res => setTimeout(res, 1000)); 
-    revalidatePath("/settings"); // Revalidate to show new list if form is part of a server component data flow
+    revalidatePath("/settings"); 
     return { success: true, message: "Mailing list settings updated (in-memory)." };
 
   } catch (error) {
@@ -260,5 +288,6 @@ export async function saveMailingLists(formData: FormData) {
     return { success: false, message: (error as Error).message || "Failed to save mailing lists." };
   }
 }
+    
 
     
