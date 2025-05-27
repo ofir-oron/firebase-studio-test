@@ -61,7 +61,7 @@ const convertTimestampsToDates = (eventData: any, docId: string): CalendarEvent 
       // console.log(`${logPrefix} '${fieldName}' looks like a Firestore Timestamp-like object. Converting.`);
       return new Timestamp(fieldValue.seconds, fieldValue.nanoseconds).toDate();
     }
-    console.warn(`${logPrefix} '${fieldName}' is not a Timestamp, string, or Timestamp-like object. Value:`, fieldValue, `Type: ${typeof fieldValue}`);
+    console.warn(`${logPrefix} '${fieldName}' ('${String(fieldValue)}') is not a Timestamp, string, or Timestamp-like object. Type: ${typeof fieldValue}. Returning invalid Date.`);
     return new Date(NaN); // Return an invalid date for other types
   };
 
@@ -74,8 +74,30 @@ const convertTimestampsToDates = (eventData: any, docId: string): CalendarEvent 
     return null;
   }
 
-  const createdAt = convertField(eventData.createdAt, "createdAt");
-  const updatedAt = convertField(eventData.updatedAt, "updatedAt");
+  // For createdAt/updatedAt, if they are missing or invalid, we can default them, but it's good to log.
+  let createdAt, updatedAt;
+  if (eventData.createdAt) {
+    createdAt = convertField(eventData.createdAt, "createdAt");
+    if (isNaN(createdAt.getTime())) {
+        console.warn(`${logPrefix} 'createdAt' was present but invalid. Defaulting to now.`);
+        createdAt = new Date();
+    }
+  } else {
+    console.warn(`${logPrefix} 'createdAt' field missing. Defaulting to now.`);
+    createdAt = new Date();
+  }
+
+  if (eventData.updatedAt) {
+    updatedAt = convertField(eventData.updatedAt, "updatedAt");
+    if (isNaN(updatedAt.getTime())) {
+        console.warn(`${logPrefix} 'updatedAt' was present but invalid. Defaulting to now.`);
+        updatedAt = new Date();
+    }
+  } else {
+    console.warn(`${logPrefix} 'updatedAt' field missing. Defaulting to now.`);
+    updatedAt = new Date();
+  }
+
 
   // Ensure all fields of CalendarEvent are present
   const result: CalendarEvent = {
@@ -83,13 +105,13 @@ const convertTimestampsToDates = (eventData: any, docId: string): CalendarEvent 
     userId: eventData.userId,
     title: eventData.title,
     eventType: eventData.eventType,
-    additionalText: eventData.additionalText,
-    isFullDay: eventData.isFullDay,
-    recipients: eventData.recipients,
+    additionalText: eventData.additionalText || "", // Ensure optional fields are at least empty strings
+    isFullDay: typeof eventData.isFullDay === 'boolean' ? eventData.isFullDay : true, // Default if not boolean
+    recipients: Array.isArray(eventData.recipients) ? eventData.recipients : [], // Default if not array
     startDate,
     endDate,
-    createdAt: isNaN(createdAt.getTime()) ? new Date() : createdAt, // Fallback for non-critical dates
-    updatedAt: isNaN(updatedAt.getTime()) ? new Date() : updatedAt, // Fallback
+    createdAt, 
+    updatedAt, 
   };
   return result;
 };
@@ -178,7 +200,7 @@ export async function updateCalendarEvent(formData: FormData) {
     
     const updatedEventForClient: CalendarEvent = {
       ...validatedData, 
-      createdAt: new Date(), 
+      createdAt: new Date(), // Note: This should ideally be the original createdAt, not new Date()
       updatedAt: new Date(), 
     };
     
@@ -218,6 +240,7 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
   }
   try {
     const eventsCol = collection(db, "events");
+    console.log(`[actions.getUserEvents] Attempting to query 'events' collection with userId: '${userId}' and orderBy 'startDate' descending. IMPORTANT: If this query returns 0 documents unexpectedly, please verify: 1) Your Firestore security rules allow this read. 2) A composite index (userId ASC, startDate DESC) exists and is active for the 'events' collection.`);
     const q = query(eventsCol, where("userId", "==", userId), orderBy("startDate", "desc"));
     
     const querySnapshot = await getDocs(q);
@@ -226,15 +249,13 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
     const userEvents: CalendarEvent[] = [];
     querySnapshot.forEach((docSnap) => {
       const eventData = docSnap.data();
-      // Minimal log for raw data to avoid excessive logging if stringify is problematic.
-      console.log(`[actions.getUserEvents] Processing doc ${docSnap.id}. userId from doc: '${eventData.userId}'. Query userId: '${userId}'.`);
+      console.log(`[actions.getUserEvents] Processing doc ${docSnap.id}. Raw data: ${JSON.stringify(eventData)}. Document userId: '${eventData.userId}'. Query userId: '${userId}'.`);
 
       const convertedEvent = convertTimestampsToDates(eventData, docSnap.id);
 
       if (convertedEvent) {
         userEvents.push(convertedEvent);
       } else {
-        // Specific error already logged in convertTimestampsToDates
         console.warn(`[actions.getUserEvents] Event ${docSnap.id} for userId '${userId}' was skipped due to critical conversion errors (e.g., invalid startDate/endDate). Check previous logs from 'convertTimestampsToDates'.`);
       }
     });
@@ -243,8 +264,14 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
     return userEvents;
   } catch (error) {
     console.error(`[actions.getUserEvents] Error fetching/processing user events from Firestore for userId '${userId}':`, error);
-    if (typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 'permission-denied') {
-        console.error(`[actions.getUserEvents] Firestore permission denied for userId '${userId}'. Check your Firestore security rules.`);
+    if (typeof error === 'object' && error !== null && 'code' in error) {
+        const firebaseError = error as { code: string; message: string };
+        console.error(`[actions.getUserEvents] Firebase error code: ${firebaseError.code}, message: ${firebaseError.message}`);
+        if (firebaseError.code === 'permission-denied') {
+            console.error(`[actions.getUserEvents] CRITICAL: Firestore permission denied for userId '${userId}'. Check your Firestore security rules.`);
+        } else if (firebaseError.code === 'failed-precondition') {
+             console.error(`[actions.getUserEvents] CRITICAL: Firestore query requires an index that is missing or still building. Message: ${firebaseError.message}. Please check the Firebase console for index creation prompts.`);
+        }
     }
     return []; 
   }
