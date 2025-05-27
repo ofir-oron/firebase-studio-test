@@ -1,3 +1,4 @@
+
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -5,6 +6,7 @@ import { useForm, Controller, SubmitHandler } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import * as z from "zod";
 import { format, addDays } from "date-fns";
+import { useRouter } from "next/navigation"; // Ensure useRouter is imported
 
 import { Button } from "@/components/ui/button";
 import { Calendar } from "@/components/ui/calendar";
@@ -17,12 +19,11 @@ import { Textarea } from "@/components/ui/textarea";
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/hooks/useAuth";
 import { createCalendarEvent } from "@/lib/actions";
-import type { EventTypeKey } from "@/lib/types"; // EventType and MailingList types are not needed for props anymore
-import { EVENT_TYPES, MAILING_LISTS } from "@/lib/constants"; // Import constants directly
+import type { EventTypeKey } from "@/lib/types";
+import { EVENT_TYPES, MAILING_LISTS } from "@/lib/constants";
 import { CalendarIcon, Loader2, Send } from "lucide-react";
 import { cn } from "@/lib/utils";
 
-// Props are no longer needed as constants are imported directly
 interface SendEventFormProps {}
 
 const getEventSchema = (eventTypes: typeof EVENT_TYPES) => z.object({
@@ -44,12 +45,13 @@ const getEventSchema = (eventTypes: typeof EVENT_TYPES) => z.object({
 
 type SendEventFormValues = z.infer<ReturnType<typeof getEventSchema>>;
 
-export function SendEventForm({}: SendEventFormProps) { // Removed props
+export function SendEventForm({}: SendEventFormProps) {
   const { toast } = useToast();
   const { user } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
+  const router = useRouter(); // Initialize router
   
-  const eventSchema = getEventSchema(EVENT_TYPES); // Use imported EVENT_TYPES
+  const eventSchema = getEventSchema(EVENT_TYPES);
 
   const form = useForm<SendEventFormValues>({
     resolver: zodResolver(eventSchema),
@@ -70,7 +72,7 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
 
   useEffect(() => {
     if (user && watchedDateRange?.from && watchedEventType) {
-      const eventTypeLabel = EVENT_TYPES.find(et => et.value === watchedEventType)?.label || watchedEventType; // Use imported EVENT_TYPES
+      const eventTypeLabel = EVENT_TYPES.find(et => et.value === watchedEventType)?.label || watchedEventType;
       const dateStr = watchedDateRange.to && watchedDateRange.from.getTime() !== watchedDateRange.to.getTime()
         ? `${format(watchedDateRange.from, "MMM d")} - ${format(watchedDateRange.to, "MMM d, yyyy")}`
         : format(watchedDateRange.from, "MMM d, yyyy");
@@ -90,6 +92,7 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
       return;
     }
     setIsLoading(true);
+    console.log("[SendEventForm] Submitting event data:", data);
 
     const formData = new FormData();
     formData.append("title", data.title);
@@ -102,8 +105,10 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
     formData.append("userId", user.id);
 
     const result = await createCalendarEvent(formData);
+    console.log("[SendEventForm] createCalendarEvent result:", result);
 
     if (result.success) {
+      console.log("[SendEventForm] Event creation successful, preparing to redirect.");
       toast({
         title: "Event Created",
         description: result.message || "Your event has been successfully scheduled.",
@@ -116,7 +121,20 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
         additionalText: "",
         title: ""
       });
+      try {
+        console.log("[SendEventForm] Attempting router.push('/calendar-overview')");
+        router.push("/calendar-overview");
+        console.log("[SendEventForm] router.push('/calendar-overview') call completed.");
+      } catch (e) {
+        console.error("[SendEventForm] Error during router.push to /calendar-overview:", e);
+        toast({
+          title: "Navigation Error",
+          description: "Could not automatically redirect. Please navigate manually.",
+          variant: "destructive",
+        });
+      }
     } else {
+      console.log("[SendEventForm] Event creation failed:", result.message, "Errors:", result.errors);
       toast({
         title: "Error Creating Event",
         description: result.message || "An unexpected error occurred.",
@@ -124,6 +142,7 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
       });
     }
     setIsLoading(false);
+    console.log("[SendEventForm] onSubmit finished, isLoading set to false.");
   };
 
   return (
@@ -169,7 +188,7 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
                     selected={{ from: field.value.from, to: field.value.to }}
                     onSelect={(range) => field.onChange(range || { from: new Date(), to: new Date() })}
                     numberOfMonths={2}
-                    disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, new Date()) } // Disable past dates except today
+                    disabled={(date) => date < addDays(new Date(), -1) && !isSameDay(date, new Date()) }
                   />
                 </PopoverContent>
               </Popover>
@@ -189,7 +208,7 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
                   <SelectValue placeholder="Select event type" />
                 </SelectTrigger>
                 <SelectContent>
-                  {EVENT_TYPES.map((type) => ( // Use imported EVENT_TYPES
+                  {EVENT_TYPES.map((type) => (
                     <SelectItem key={type.value} value={type.value}>
                       <div className="flex items-center">
                         <type.icon className="mr-2 h-4 w-4 text-muted-foreground" />
@@ -242,7 +261,7 @@ export function SendEventForm({}: SendEventFormProps) { // Removed props
                     <SelectValue placeholder="Select mailing list(s)" />
                   </SelectTrigger>
                   <SelectContent>
-                    {MAILING_LISTS.map((list) => ( // Use imported MAILING_LISTS
+                    {MAILING_LISTS.map((list) => (
                       <SelectItem key={list.id} value={list.id}>
                         {list.name}
                       </SelectItem>
@@ -272,6 +291,7 @@ const FormFieldItem: React.FC<{ children: React.ReactNode, error?: string, class
 );
 
 function isSameDay(date1: Date, date2: Date): boolean {
+  if (!date1 || !date2) return false;
   return date1.getFullYear() === date2.getFullYear() &&
          date1.getMonth() === date2.getMonth() &&
          date1.getDate() === date2.getDate();
