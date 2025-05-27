@@ -13,7 +13,7 @@ export default function SendEventPage() {
   return (
     <div className="space-y-6">
       <header>
-        <h1 className="text-3xl font-bold tracking-tight text-foreground">Create New Event</h1>
+        <h1 className="text-3xl font-bold tracking-tight text-foreground">Create A New Event</h1>
         <p className="text-muted-foreground">Schedule your time off and notify relevant parties.</p>
       </header>
       <Card className="shadow-lg">
