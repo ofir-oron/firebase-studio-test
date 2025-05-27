@@ -43,10 +43,10 @@ const convertTimestampsToDates = (eventData: any): CalendarEvent => {
   return {
     ...eventData,
     id: eventData.id, // id is passed explicitly as it's the doc ID
-    startDate: (eventData.startDate instanceof Timestamp) ? eventData.startDate.toDate() : eventData.startDate,
-    endDate: (eventData.endDate instanceof Timestamp) ? eventData.endDate.toDate() : eventData.endDate,
-    createdAt: (eventData.createdAt instanceof Timestamp) ? eventData.createdAt.toDate() : eventData.createdAt,
-    updatedAt: (eventData.updatedAt instanceof Timestamp) ? eventData.updatedAt.toDate() : eventData.updatedAt,
+    startDate: (eventData.startDate instanceof Timestamp) ? eventData.startDate.toDate() : new Date(eventData.startDate as string), // Added fallback for string dates if not Timestamp
+    endDate: (eventData.endDate instanceof Timestamp) ? eventData.endDate.toDate() : new Date(eventData.endDate as string), // Added fallback
+    createdAt: (eventData.createdAt instanceof Timestamp) ? eventData.createdAt.toDate() : new Date(eventData.createdAt as string), // Added fallback
+    updatedAt: (eventData.updatedAt instanceof Timestamp) ? eventData.updatedAt.toDate() : new Date(eventData.updatedAt as string), // Added fallback
   } as CalendarEvent;
 };
 
@@ -75,24 +75,25 @@ export async function createCalendarEvent(formData: FormData) {
 
     const docRef = await addDoc(collection(db, "events"), eventToStore);
     
+    // Construct the event object as it would be after fetching and converting timestamps
     const newEventForClient: CalendarEvent = {
       id: docRef.id,
       userId: validatedData.userId,
       title: validatedData.title,
       eventType: validatedData.eventType as any, 
-      startDate: validatedData.startDate, 
-      endDate: validatedData.endDate, 
+      startDate: validatedData.startDate, // JS Date
+      endDate: validatedData.endDate, // JS Date
       isFullDay: validatedData.isFullDay,
       additionalText: validatedData.additionalText,
       recipients: validatedData.recipients,
-      createdAt: new Date(), 
-      updatedAt: new Date(), 
+      createdAt: new Date(), // Approximate, actual value is serverTimestamp
+      updatedAt: new Date(), // Approximate
     };
 
     console.log("[actions.createCalendarEvent] Event created in Firestore with ID:", docRef.id);
     
     revalidatePath("/calendar-overview");
-    revalidatePath("/send-event");
+    revalidatePath("/send-event"); // revalidate send-event if needed, or remove if not
 
     return { success: true, message: "Event created successfully!", event: newEventForClient };
   } catch (error) {
@@ -127,15 +128,17 @@ export async function updateCalendarEvent(formData: FormData) {
       endDate: Timestamp.fromDate(validatedData.endDate),
       updatedAt: serverTimestamp(),
     };
+    // remove id from update payload as it's part of the doc ref.
     const { id, ...updatePayload } = eventToUpdate;
 
 
     await updateDoc(eventRef, updatePayload);
 
+    // Construct the event object as it would be after fetching and converting timestamps
     const updatedEventForClient: CalendarEvent = {
-      ...validatedData, 
-      createdAt: new Date(), 
-      updatedAt: new Date(), 
+      ...validatedData, // has JS dates
+      createdAt: new Date(), // This would ideally be the original createdAt, not new Date()
+      updatedAt: new Date(), // Approximate
     };
     
     console.log("[actions.updateCalendarEvent] Event updated in Firestore:", validatedData.id);
@@ -155,6 +158,8 @@ export async function updateCalendarEvent(formData: FormData) {
 
 export async function deleteCalendarEvent(eventId: string, userId: string) {
   try {
+    // Optional: Add a check here to ensure the event belongs to the user before deleting,
+    // though Firestore rules should also enforce this.
     const eventRef = doc(db, "events", eventId);
     await deleteDoc(eventRef);
     console.log("[actions.deleteCalendarEvent] Event deleted from Firestore:", eventId);
@@ -168,13 +173,12 @@ export async function deleteCalendarEvent(eventId: string, userId: string) {
 
 export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
   console.log(`[actions.getUserEvents] Received request for userId: '${userId}'`);
-  if (!userId) {
-    console.error("[actions.getUserEvents] userId is undefined or empty. Returning empty array.");
+  if (!userId || typeof userId !== 'string' || userId.trim() === "") {
+    console.error("[actions.getUserEvents] userId is invalid (undefined, not a string, or empty). Returning empty array.");
     return [];
   }
   try {
     const eventsCol = collection(db, "events");
-    // Ensure the userId field in Firestore exactly matches the one being queried.
     const q = query(eventsCol, where("userId", "==", userId), orderBy("startDate", "desc"));
     
     const querySnapshot = await getDocs(q);
@@ -182,9 +186,11 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
     
     const userEvents: CalendarEvent[] = [];
     querySnapshot.forEach((docSnap) => {
-      // console.log(`[actions.getUserEvents] Raw data for doc ${docSnap.id}:`, docSnap.data());
+      const eventData = docSnap.data();
+      console.log(`[actions.getUserEvents] Raw data for doc ${docSnap.id}:`, JSON.stringify(eventData)); // Log raw data
+      console.log(`[actions.getUserEvents] Document userId from Firestore: '${eventData.userId}', Query userId: '${userId}'`); // Log userId from doc
+
       try {
-        const eventData = docSnap.data();
         const convertedEvent = convertTimestampsToDates({ ...eventData, id: docSnap.id });
         
         // Stricter check for valid Date objects after conversion
@@ -192,7 +198,7 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
             convertedEvent.endDate instanceof Date && !isNaN(convertedEvent.endDate.getTime())) {
           userEvents.push(convertedEvent);
         } else {
-          console.warn(`[actions.getUserEvents] Skipped event ${docSnap.id} for userId '${userId}' due to invalid/missing dates after conversion. startDate: ${convertedEvent.startDate}, endDate: ${convertedEvent.endDate}`);
+          console.warn(`[actions.getUserEvents] Skipped event ${docSnap.id} for userId '${userId}' due to invalid/missing dates after conversion. Raw startDate: ${eventData.startDate}, Raw endDate: ${eventData.endDate}. Converted startDate: ${convertedEvent.startDate}, Converted endDate: ${convertedEvent.endDate}`);
         }
       } catch (e) {
           console.error(`[actions.getUserEvents] Error converting event ${docSnap.id} for userId '${userId}':`, e);
@@ -203,13 +209,18 @@ export async function getUserEvents(userId: string): Promise<CalendarEvent[]> {
     return userEvents;
   } catch (error) {
     console.error(`[actions.getUserEvents] Error fetching/processing user events from Firestore for userId '${userId}':`, error);
+    // Check if it's a Firebase permission error specifically
+    if (typeof error === 'object' && error !== null && 'code' in error && (error as any).code === 'permission-denied') {
+        console.error(`[actions.getUserEvents] Firestore permission denied for userId '${userId}'. Check your Firestore security rules.`);
+    }
     return []; 
   }
 }
 
 // Mailing list actions remain in-memory for now
 export async function getMailingLists(): Promise<MailingList[]> {
-  await new Promise(res => setTimeout(res, 300));
+  // Simulate async fetch if these were from a DB
+  await new Promise(res => setTimeout(res, 300)); // Simulate network delay
   return mailingLists;
 }
 
@@ -217,24 +228,28 @@ export async function saveMailingLists(formData: FormData) {
   const newListName = formData.get("newListName") as string;
   const newListEmailsRaw = formData.get("newListEmails") as string; 
 
+  // This is just an example for in-memory, a real DB would handle updates/deletes differently
   try {
+    // For this example, we'll just focus on adding new lists from FormData
+    // A real implementation would handle updates to existing lists or deletions
     if (newListName && newListEmailsRaw) {
       const emails = newListEmailsRaw.split(',').map(e => e.trim()).filter(e => z.string().email().safeParse(e).success);
       if (emails.length > 0) {
         const newList: MailingList = {
-          id: `ml_${Date.now()}`,
+          id: `ml_${Date.now()}_${Math.random().toString(36).substring(2,7)}`, // More unique ID
           name: newListName,
           emails: emails,
         };
         mailingLists.push(newList);
         console.log("[actions.saveMailingLists] New mailing list added (in-memory):", newList);
-      } else if (newListEmailsRaw) {
-         throw new Error("Invalid email format in new list.");
+      } else if (newListEmailsRaw) { // Only throw error if emails were provided but all were invalid
+         throw new Error("Invalid email format in new list. All provided emails were invalid.");
       }
     }
     
+    // Simulate saving to a persistent store
     await new Promise(res => setTimeout(res, 1000)); 
-    revalidatePath("/settings");
+    revalidatePath("/settings"); // Revalidate to show new list if form is part of a server component data flow
     return { success: true, message: "Mailing list settings updated (in-memory)." };
 
   } catch (error) {
@@ -245,3 +260,5 @@ export async function saveMailingLists(formData: FormData) {
     return { success: false, message: (error as Error).message || "Failed to save mailing lists." };
   }
 }
+
+    
